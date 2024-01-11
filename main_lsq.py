@@ -134,7 +134,7 @@ def main():
     global best_valid_top1, best_valid_top5, best_test_top1, test_top1
     start_epoch = 0
 
-    train_loader, valid_loader = get_mnist_train_valid_loader(                      # you can change Batch_size, valid_size (ratio)
+    train_loader, valid_loader = get_mnist_train_valid_loader(
             data_dir='/home/intern1/data/', batch_size=64,
             random_seed=42, valid_size=0.1, shuffle=True, show_sample=False,
             num_workers=4, pin_memory=False)
@@ -142,11 +142,10 @@ def main():
             data_dir='/home/intern1/data/', batch_size=64, shuffle=False,
             num_workers=4, pin_memory=False)
 
-    model = MLP(input_size=32*32, hidden_dim=128, output_class=10).cuda()           # you can change model's hidden size
+    model = MLP(input_size=32*32, hidden_dim=128, output_class=10).cuda()
 
     criterion = nn.CrossEntropyLoss().cuda()
     optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)                # you can change a optimizer. (adam, rmsprop ...)
-                                                                                    # you can also change learning rate.
     # optimizer = optim.Adam(model.parameters(), lr=2e-3)
 
     num_params = 0
@@ -154,12 +153,16 @@ def main():
         num_params += params.view(-1).size(0)
     print("# of parameters : " + str(num_params))
 
-    total_epochs = 20                                                               # you can change total epochs
-    lsq_start = 15
+    total_epochs = 20
+    lsq_start = 15                                                                  # you can change starting points
 
     for epoch in range(1, total_epochs):
         if epoch == lsq_start:
-            model = lsq_prepare(model, w_bits=4, quant_inference=True, per_channel=False, batch_init=20)
+            model = lsq_prepare(model,
+                                w_bits=4,                                           # you can change w_bits and per_channel
+                                quant_inference=True,
+                                per_channel=False,
+                                batch_init=20)
             print("\n***LSQ Training Prepared***")
 
             num_params = 0
