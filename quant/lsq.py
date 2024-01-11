@@ -42,7 +42,10 @@ class LSQ(Function):
             w_q = Round.apply(torch.div(weight, alpha).clamp(Qn, Qp)) * alpha
             w_q = torch.transpose(w_q, 0, 1).contiguous().view(sizes)
         else:
-            w_q = Round.apply(torch.div(weight, alpha).clamp(Qn, Qp)) * alpha
+            # TODO set w_q for layer-wise quantization
+            # hint: there will be a single-sized tensor for quant scale factor, alpha
+            # w_q =
+            pass
         return w_q
 
     @staticmethod
@@ -56,7 +59,10 @@ class LSQ(Function):
             q_w = torch.div(weight, alpha).transpose(0, 1)
             q_w = q_w.contiguous().view(sizes)
         else:
-            q_w = torch.div(weight, alpha)
+            # TODO set q_w for layer-wise quantization
+            # hint: there will be a single-sized tensor for quant scale factor, alpha
+            # q_w =
+            pass
 
         smaller = (q_w < Qn).float()
         bigger = (q_w > Qp).float()
@@ -84,12 +90,14 @@ class LSQWeightQuantizer(nn.Module):
         if not self.per_channel:
             self.s = torch.nn.Parameter(torch.ones(1), requires_grad=True)
         else:
-            self.s = torch.nn.Parameter(torch.ones(channel_num), requires_grad=True)
+            # TODO define the size of the quantization scale parameter
+            # self.s = torch.nn.Parameter(torch.ones(), requires_grad=True)
+            pass
         self.init_state = 0
+        self.g = 1.0
 
     def forward(self, weight):
         if self.init_state==0:
-            self.g = 1.0  # 1.0/math.sqrt(weight.numel() * self.Qp)
             if self.per_channel:
                 self.s.data = torch.max(torch.abs(weight.detach().contiguous().view(weight.size()[0], -1)), dim=-1)[0]/self.Qp
             else:

@@ -27,27 +27,19 @@ class BasicBlock(nn.Module):
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
 
-        self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes)
-        self.relu = nn.ReLU(inplace=True)
-        self.conv2 = conv3x3(planes, planes)
-        self.bn2 = norm_layer(planes)
+        # TODO struct the basic block of ResNet
+        # Be aware of downsample and stride for cases where stride is not 1
+
         self.downsample = downsample
         self.stride = stride
 
     def forward(self, x):
-
-        identity = x
-
-        out = self.conv1(x)
-        out = self.bn1(out)
-        out = self.relu(out)
-
-        out = self.conv2(out)
-        out = self.bn2(out)
+        # TODO struct the forward of the basic block based on the methods above
+        # Be aware of identity and downsample networks
 
         if self.downsample is not None:
-            identity = self.downsample(x)
+            # identity =
+            pass
 
         out += identity
         out = self.relu(out)
@@ -82,6 +74,7 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.bias, 0)
         '''
     def _make_layer(self, block, planes, blocks, stride=1):
+        # TODO consider the role of _make_layer(). Do not need to modify the codes.
         norm_layer = self._norm_layer
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
