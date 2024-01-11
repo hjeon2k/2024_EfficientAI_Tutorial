@@ -25,3 +25,4 @@ class MLP_class(nn.Module):
 
 def MLP(input_size, hidden_dim, output_class):
     return MLP_class(input_size, hidden_dim, output_class)
+
