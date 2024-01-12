@@ -2,3 +2,4 @@ bin/
 data/
 *.pyc
 __pycache__/
+out/
