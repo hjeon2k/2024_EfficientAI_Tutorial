@@ -13,12 +13,14 @@ __all__ = ['MLP']
 class MLP_class(nn.Module):
     def __init__(self, input_size, hidden_dim, output_class):
         super().__init__()
-        # TODO struct the model
+        self.fc1 = nn.Linear(input_size, hidden_dim)
+        self.fc2 = nn.Linear(hidden_dim, output_class)
 
     def forward(self, x):
         # Is this reshape function is necessary? Why?
         x = x.view(x.size(0), -1)
-        # TODO struct the forward computation based on the its methods
+        x = F.relu(self.fc1(x))
+        x = F.log_softmax(self.fc2(x))
         return x
 
 def MLP(input_size, hidden_dim, output_class):

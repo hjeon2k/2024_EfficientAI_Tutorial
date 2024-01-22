@@ -1,3 +1,6 @@
+from __future__ import print_function
+
+import argparse
 import os
 import torch
 import torch.nn as nn
@@ -5,15 +8,57 @@ import torch.backends.cudnn as cudnn
 import torch.optim as optim
 
 import time
+import models
 from utils import AverageMeter
 from utils import accuracy
 from utils.progress.progress.bar import Bar as Bar
-from utils import get_mnist_train_valid_loader
-from utils import get_mnist_test_loader
+from utils import get_cifar10_100_train_valid_loader
+from utils import get_cifar10_100_test_loader
 
-from models import MLP
+model_names = sorted(name for name in models.__dict__
+                     if name.islower() and not name.startswith("__")
+                     and callable(models.__dict__[name]))
 
-os.environ['CUDA_VISIBLE_DEVICES'] = '0'                                            # GPU number that you will use
+parser = argparse.ArgumentParser(description='Propert ResNets for CIFAR10 in pytorch')
+parser.add_argument('--gpu-id', default='0', type=str,
+                                   help='ID(s) for CUDA_VISIBLE_DEVICES')
+parser.add_argument('--arch', '-a', metavar='ARCH', default='resnet20',
+                    choices=model_names,
+                    help='model architecture: ' + ' | '.join(model_names) +
+                    ' (default: resnet20)')
+parser.add_argument('-j', '--workers', default=4, type=int, metavar='N',
+                    help='number of data loading workers (default: 4)')
+parser.add_argument('--epochs', default=200, type=int, metavar='N',
+                    help='number of total epochs to run')
+parser.add_argument('-b', '--batch-size', default=128, type=int,
+                    metavar='N', help='mini-batch size (default: 128)')
+parser.add_argument('--lr', '--learning-rate', default=0.1, type=float,
+                    metavar='LR', help='initial learning rate')
+parser.add_argument('--momentum', default=0.9, type=float, metavar='M',
+                    help='momentum')
+parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
+                    metavar='W', help='weight decay (default: 1e-4)')
+parser.add_argument('-d', '--data', default='/home/intern1/data/cifar10/', type=str, help='path to dataset')
+parser.add_argument('--valid-size', default=0.1, type=float,
+                    help='Ratio of valid set split from training set of CIFAR \
+                    dataset. If 0, no validation set used.')
+parser.add_argument('-o', '--optimizer', default='sgd', type=str,
+                    choices=['sgd', 'adam', 'adamax', 'adamw'],
+                    help='Optimizer to be used. (default: sgd)')
+parser.add_argument('--lr-method', default='lr_step', type=str,
+                    choices=['lr_step', 'lr_linear', 'lr_exp', 'lr_cosineanneal'],
+                    help='Set learning rate scheduling method.')
+parser.add_argument('--schedule', nargs='+', default=[100, 150], type=int,
+                    help='Decrease learning rate at these epochs when using step method')
+parser.add_argument('--gamma', default=0.1, type=float,
+                    help='LR is multiplication factor')
+parser.add_argument('--T0', default=10, type=int,
+                    help='Number of steps for the first restart in SGDR')
+parser.add_argument('--T-mult', default=1, type=int,
+                    help='A factor increases T_{i} after restart in SGDR')
+
+args = parser.parse_args()
+os.environ['CUDA_VISIBLE_DEVICES'] = args.gpu_id
 
 best_valid_top1 = 0
 best_valid_top5 = 0
@@ -131,37 +176,52 @@ def test(val_loader, model, criterion, epoch):
 
 def main():
     global best_valid_top1, best_valid_top5, best_test_top1, test_top1
-    start_epoch = 0
+    args = parser.parse_args()
 
-    train_loader, valid_loader = get_mnist_train_valid_loader(                      # you can change Batch_size, valid_size (ratio)
-            data_dir='/home/intern1/data/', batch_size=64,
-            random_seed=42, valid_size=0.1, shuffle=True, show_sample=False,
-            num_workers=4, pin_memory=False)
-    test_loader = get_mnist_test_loader(
-            data_dir='/home/intern1/data/', batch_size=64, shuffle=False,
-            num_workers=4, pin_memory=False)
+    train_loader, train_sampler, valid_loader = get_cifar10_100_train_valid_loader(
+            dataset='cifar10', data_dir=args.data, batch_size=args.batch_size,
+            augment=True, random_seed=42, valid_size=args.valid_size, shuffle=True,
+            num_workers=args.workers, distributed=False,
+            pin_memory=False) # True for CUDA?
+    test_loader = get_cifar10_100_test_loader(
+            dataset='cifar10', data_dir=args.data, batch_size=args.batch_size,
+            shuffle=False, num_workers=args.workers, pin_memory=False) # True for CUDA?
 
-    model = MLP(input_size=32*32, hidden_dim=128, output_class=10).cuda()           # you can change model's hidden size
+    model = models.__dict__[args.arch]().cuda()                                             # you can change model's hidden size
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)                # you can change a optimizer. (adam, rmsprop ...)
-                                                                                    # you can also change learning rate.
-    #optimizer = optim.Adam(model.parameters(), lr=2e-3)
+
+    if args.optimizer == 'sgd':
+        optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+    elif args.optimizer == 'adam':
+        optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer == 'adamax':
+        optimizer = optim.Adamax(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    elif args.optimizer == 'adamw':
+        optimizer = optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+
+    if args.lr_method == 'lr_step':
+        lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, args.schedule, args.gamma)
+    elif args.lr_method == 'lr_linear':
+        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lambda step: (1.0-step/args.epochs))
+    elif args.lr_method == 'lr_exp':
+        lr_scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, args.gamma)
+    elif args.lr_method == 'lr_cosineanneal':
+        lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, args.T0, args.T_mult)
 
     num_params = 0
     for params in model.parameters():
         num_params += params.view(-1).size(0)
     print("# of parameters : " + str(num_params))
 
-    total_epochs = 50                                                               # you can change total epochs
-
-    for epoch in range(1, total_epochs):
+    for epoch in range(1, args.epochs):
         current_lr = optimizer.param_groups[0]['lr']
-        print(f"\nEpoch: [{epoch} | {total_epochs}] LR: {current_lr:.3e}")
+        print(f"\nEpoch: [{epoch} | {args.epochs}] LR: {current_lr:.3e}")
 
         train_loss, train_top1, train_top5 = train(
             train_loader, model, criterion,
             optimizer, epoch)
+        lr_scheduler.step()
 
         valid_loss, valid_top1, _ = test(
                     valid_loader, model, criterion, epoch)
